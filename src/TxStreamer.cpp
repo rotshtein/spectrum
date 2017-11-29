@@ -9,6 +9,7 @@
 extern bool stop_signal_called;
 extern unsigned long long NSamp;
 extern unsigned long long NPack;
+extern long long NumSamplesFile;
 
 TxStreamer::TxStreamer(struct StreamerParams *Params) :
 		Streamer(Params) {
@@ -40,6 +41,9 @@ void TxStreamer::Run() {
 	 double *LogTime = new double [LLog];
 	 */
 	struct timespec tp0, tp1;
+	long long Round = 0;
+	long long PlayedRound = 0;
+	long long PlayedTotal = 0;
 
 	double PacketRate = Rate / double(SAMPS_PER_BUFF);
 	double InvPacketRate = 1.0 / PacketRate;
@@ -82,7 +86,6 @@ void TxStreamer::Run() {
 				for(int kk = 0; kk < 8; kk++)
 				{
 					int k = tx_stream->send(NewBuffer + n , LowRateBatch, md);
-					NSamp += k;
 					n += k;
 				}
 
@@ -111,6 +114,7 @@ void TxStreamer::Run() {
 		Buff1->ReleaseReadBuffer(1);
 		Buff1->AdvanceReadBuffer();
 		NumTransmittedSamples += SAMPS_PER_BUFF;
+		NSamp = NumTransmittedSamples;
 		NumTransmitedPackets++;
 		NPack = NumTransmitedPackets;
 	/*
@@ -146,8 +150,15 @@ void TxStreamer::Run() {
 		}
 */
 		if ((NumTransmittedSamples & 0xFFFFFF) == 0) {
-			cout << "Played " << NumTransmittedSamples << endl;
-			cout << "Time " << tp1.tv_sec << " " << tp1.tv_nsec << endl;
+			if(NumTransmittedSamples >= (PlayedTotal + NumSamplesFile))
+			{
+				Round++;
+				PlayedTotal += NumSamplesFile;
+			}
+			PlayedRound = NumTransmittedSamples - PlayedTotal;
+
+			cout << "Played Round: " <<Round<<" Samples: "<< PlayedRound<<" of: "<< NumSamplesFile<< endl;
+	//		cout << "Time " << tp1.tv_sec << " " << tp1.tv_nsec << endl;
 		}
 	}
 

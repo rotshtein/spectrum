@@ -17,8 +17,10 @@ using namespace std;
 #include "StreamingRequests.h"
 #include "Streamer.h"
 #include "TxStreamer.h"
+#include <sys/stat.h>
 
 unsigned long long NSamp, NPack;
+long long NumSamplesFile;
 Streamer *pobjSt;
 namespace po = boost::program_options;
 
@@ -733,8 +735,20 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 		}
 		cout << "Playing from file" << endl;
 		unsigned long long CollectedSamples = 0;
-		FILE *infile = fopen(file.c_str(), "rb");
+		struct stat file_stats;
+		stat(file.c_str(), &file_stats);
+		long long FileSize = file_stats.st_size;
+		NumSamplesFile = FileSize >> 2;
 		int BatchSize = SAMPS_PER_BUFF * 32;
+		long long NumBatches = NumSamplesFile/BatchSize;
+		if((NumBatches*BatchSize) < NumSamplesFile)
+		{
+			NumBatches++;
+		}
+		NumSamplesFile = NumBatches * BatchSize;
+		FILE *infile = fopen(file.c_str(), "rb");
+
+
 		bool EndFile = false;
 		while (objBuffers.NumBuffers > 0) {
 			complex<short> *NewBuffer = objBuffers.GetMultipleWriteBuffer();
@@ -793,13 +807,14 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 		        }
 
 
-
+		long long CollectedInFile = 0;
 		cout<<"Read file again"<<endl;
 		if (EndFile and not LoopMode) {
 			fclose(infile);
 		} else {
 			if (EndFile and LoopMode) {
 				fseek(infile, 0, 3);
+				CollectedInFile = 0;
 			}
 
 			while (not stop_signal_called) {
@@ -816,7 +831,8 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 				complex<short> *NewBuffer = objBuffers.GetMultipleWriteBuffer();
 				int n = fread(NewBuffer, 4, BatchSize, infile);
 				CollectedSamples += n;
-				if((CollectedSamples &0xFFFFFF) == 0)
+				CollectedInFile += n;
+				if((CollectedInFile &0xFFFFFF) == 0)
 					cout<<"Read "<<CollectedSamples<<endl;
 				if (n < BatchSize) {
 					EndFile = true;
@@ -845,7 +861,10 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 		}
 
 		while(not stop_signal_called)
+		{
 			boost::this_thread::sleep(boost::posix_time::milliseconds(1000));
+
+		}
 	}
 
 	else {
@@ -874,7 +893,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 
 		boost::thread workerThread(RunStreamer, (void *) &objStreamer);
 
-		  pthread_t threadID = (pthread_t) workerThread.native_handle();
+		 pthread_t threadID = (pthread_t) workerThread.native_handle();
 
 			    struct sched_param param;
 			    int retcode;
