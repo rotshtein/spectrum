@@ -46,6 +46,8 @@ void my_handler(uhd::msg::type_t type, const std::string &msg){
 	}
 	if(type == 'e')
 	{
+
+		fprintf(stderr,"EROR %s\n",msg.c_str());
 		exit(-1);
 	}
 

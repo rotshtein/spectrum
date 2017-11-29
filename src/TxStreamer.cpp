@@ -158,6 +158,7 @@ void TxStreamer::Run() {
 			PlayedRound = NumTransmittedSamples - PlayedTotal;
 
 			cout << "Played Round: " <<Round<<" Samples: "<< PlayedRound<<" of: "<< NumSamplesFile<< endl;
+			fprintf(stderr,"PLAY Round: %lld Samples: %lld of: %lld\n",Round,PlayedRound,NumSamplesFile);
 	//		cout << "Time " << tp1.tv_sec << " " << tp1.tv_nsec << endl;
 		}
 	}

@@ -114,6 +114,7 @@ void Streamer::Run(void) {
 						fwrite(LogTime, 8, LLog, fid);
 						cout << " PtrLog " << PtrLog << endl;
 						fclose(fid);
+						fprintf(stderr,"EROR Rx Drop/Overflow Error\n");
 
 //					boost::this_thread::sleep(boost::posix_time::microseconds(1000));
 
