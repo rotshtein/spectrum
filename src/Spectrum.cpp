@@ -814,7 +814,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 		} else {
 			if (EndFile and LoopMode) {
 				fseek(infile, 0, 3);
-				CollectedInFile = 0;
+
 			}
 
 			while (not stop_signal_called) {
@@ -836,11 +836,16 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 					cout<<"Read "<<CollectedSamples<<endl;
 				if (n < BatchSize) {
 					EndFile = true;
-					memset((void*) (NewBuffer + n), 0, (BatchSize - n) << 2);
-					objBuffers.AdvanceWriteBuffer(32);
+					if( n > 0)
+					{
+						memset((void*) (NewBuffer + n), 0, (BatchSize - n) << 2);
+						objBuffers.AdvanceWriteBuffer(32);
+						CollectedSamples += (BatchSize - n);
+					}
 
 					if (LoopMode) {
 						fseek(infile, 0, 3);
+						CollectedInFile = 0;
 					} else {
 						break;
 					}
