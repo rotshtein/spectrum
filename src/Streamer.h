@@ -11,6 +11,7 @@
 
 #include "Buffers.h"
 #include "StreamingRequests.h"
+#include "defs.h"
 
 class Streamer {
 	double MaxTime;

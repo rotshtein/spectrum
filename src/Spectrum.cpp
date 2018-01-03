@@ -18,98 +18,92 @@ using namespace std;
 #include "Streamer.h"
 #include "TxStreamer.h"
 #include <sys/stat.h>
+#include <pthread.h>
+#include <sched.h>
+#include <unistd.h>
+#include "FileHandler.h"
 
 unsigned long long NSamp, NPack;
+unsigned long long Time2PrintMask;
 long long NumSamplesFile;
 Streamer *pobjSt;
 namespace po = boost::program_options;
-
+//int NumErrors = 0;
 bool stop_signal_called = false;
 void sig_int_handler(int) {
 	stop_signal_called = true;
 }
 
+FILE *StatFile;
 
-void my_handler(uhd::msg::type_t type, const std::string &msg){
+void my_handler(uhd::msg::type_t type, const std::string &msg) {
 //handle the message...
-	cout<<msg<<endl;
-	if(msg == "U")
-	{
-		struct timespec tp1;
+	cout << msg << endl;
+	if (msg == "U") {
+//		struct timespec tp1;
+//
+//		clock_gettime(CLOCK_MONOTONIC, &tp1);
+//
+//		cout << "NPack NSamp " << NPack << " " << NSamp << endl;
+//		cout << "Time " << tp1.tv_sec << " " << tp1.tv_nsec << endl;
+//		cout << "Delta " << pobjSt->Delta << endl;
+		//	exit(-1);
+		fprintf(StatFile, "EROR %s\n", msg.c_str());
+		fflush(StatFile);
 
-		clock_gettime(CLOCK_MONOTONIC, &tp1);
-
-		cout<<"NPack NSamp "<<NPack<<" "<<NSamp<<endl;
-		cout << "Time " << tp1.tv_sec << " " << tp1.tv_nsec << endl;
-		cout<<"Delta "<<pobjSt->Delta<<endl;
-		exit(-1);
 	}
-	if(type == 'e')
-	{
+	if (type == 'e') {
 
-		fprintf(stderr,"EROR %s\n",msg.c_str());
-		exit(-1);
+		fprintf(StatFile, "EROR %s\n", msg.c_str());
+		fflush(StatFile);
+//		NumErrors++;
+//		cout<<"Errors "<<NumErrors<<endl;
+		//	exit(-1);
 	}
 
 }
-
-
 
 SpectrumCalc objSpec;
+FileHandler objFile;
 static int Ctr = 0;
 
+void displayAndChange(boost::thread& daThread) {
+	int retcode;
+	int policy;
 
+	pthread_t threadID = (pthread_t) daThread.native_handle();
 
-void displayAndChange(boost::thread& daThread)
-{
-    int retcode;
-    int policy;
+	struct sched_param param;
 
-    pthread_t threadID = (pthread_t) daThread.native_handle();
+	if ((retcode = pthread_getschedparam(threadID, &policy, &param)) != 0) {
+		errno = retcode;
+		perror("pthread_getschedparam");
+		exit(EXIT_FAILURE);
+	}
 
-    struct sched_param param;
+	std::cout << "INHERITED: ";
+	std::cout << "policy="
+			<< ((policy == SCHED_FIFO) ? "SCHED_FIFO" :
+				(policy == SCHED_RR) ? "SCHED_RR" :
+				(policy == SCHED_OTHER) ? "SCHED_OTHER" : "???")
+			<< ", priority=" << param.sched_priority << std::endl;
 
-    if ((retcode = pthread_getschedparam(threadID, &policy, &param)) != 0)
-    {
-        errno = retcode;
-        perror("pthread_getschedparam");
-        exit(EXIT_FAILURE);
-    }
+	policy = SCHED_FIFO;
+	param.sched_priority = 4;
 
-    std::cout << "INHERITED: ";
-    std::cout << "policy=" << ((policy == SCHED_FIFO)  ? "SCHED_FIFO" :
-                               (policy == SCHED_RR)    ? "SCHED_RR" :
-                               (policy == SCHED_OTHER) ? "SCHED_OTHER" :
-                                                         "???")
-              << ", priority=" << param.sched_priority << std::endl;
+	if ((retcode = pthread_setschedparam(threadID, policy, &param)) != 0) {
+		errno = retcode;
+		perror("pthread_setschedparam");
+		exit(EXIT_FAILURE);
+	}
 
-
-    policy = SCHED_FIFO;
-    param.sched_priority = 4;
-
-    if ((retcode = pthread_setschedparam(threadID, policy, &param)) != 0)
-    {
-        errno = retcode;
-        perror("pthread_setschedparam");
-        exit(EXIT_FAILURE);
-    }
-
-    std::cout << "  CHANGED: ";
-    std::cout << "policy=" << ((policy == SCHED_FIFO)  ? "SCHED_FIFO" :
-                               (policy == SCHED_RR)    ? "SCHED_RR" :
-                               (policy == SCHED_OTHER) ? "SCHED_OTHER" :
-                                                          "???")
-              << ", priority=" << param.sched_priority << std::endl;
+	std::cout << "  CHANGED: ";
+	std::cout << "policy="
+			<< ((policy == SCHED_FIFO) ? "SCHED_FIFO" :
+				(policy == SCHED_RR) ? "SCHED_RR" :
+				(policy == SCHED_OTHER) ? "SCHED_OTHER" : "???")
+			<< ", priority=" << param.sched_priority << std::endl;
 }
-
-
-
-
-
-
-
-
-
 
 template<typename samp_type> void recv_to_file(uhd::usrp::multi_usrp::sptr usrp,
 		const std::string &cpu_format, const std::string &wire_format,
@@ -310,10 +304,15 @@ void AGC2(uhd::usrp::multi_usrp::sptr usrp, double &gain, Buffers *pBuffers,
 
 	bool Converged = false;
 
+	int Step = 0;
+
+	//pReq->InsertRequest(0);
+
 	while ((not Converged) and (not stop_signal_called)) {
 		//Stream SAMPS_PER_BUFF
 
-		pReq->InsertRequest(SAMPS_PER_BUFF);
+		pReq->InsertRequest(SAMPS_PER_BUFF * 16);
+
 		complex<short> *NewBuffer = 0;
 		while (1) {
 			NewBuffer = pBuffers->GetReadBuffer();
@@ -325,7 +324,7 @@ void AGC2(uhd::usrp::multi_usrp::sptr usrp, double &gain, Buffers *pBuffers,
 		}
 
 		float Power = objSpec.CalcPower(((short *) NewBuffer) + 1000,
-		SAMPS_PER_BUFF - 500);
+				SAMPS_PER_BUFF - 500);
 
 		pBuffers->AdvanceReadBuffer();
 		pBuffers->ReleaseReadBuffer(1);
@@ -333,7 +332,8 @@ void AGC2(uhd::usrp::multi_usrp::sptr usrp, double &gain, Buffers *pBuffers,
 		float Ratio = 4194304.0 * InvPower;
 		float Delta = log10(Ratio);
 		Delta *= 10.0f;
-		cout << "Current Gain, Power, Delta: " << gain << " " << Power << " "<<Delta<< endl;
+		cout << "Current Gain, Power, Delta: " << gain << " " << Power << " "
+				<< Delta << endl;
 
 		float NewGain = gain + Delta;
 		NewGain = floor(NewGain * 2 + 0.5) * 0.5;
@@ -356,8 +356,12 @@ void AGC2(uhd::usrp::multi_usrp::sptr usrp, double &gain, Buffers *pBuffers,
 					<< boost::format("Actual RX Gain: %f dB...")
 							% usrp->get_rx_gain() << std::endl << std::endl;
 			gain = usrp->get_rx_gain();
-			boost::this_thread::sleep(boost::posix_time::milliseconds(10));
+
 			cout << "AGC Step, Gain =  " << gain << endl;
+			boost::this_thread::sleep(boost::posix_time::milliseconds(100));
+			pBuffers->Reset();
+			Step++;
+
 		}
 
 	}
@@ -418,14 +422,48 @@ void RunStreamer(void *PtrIn) {
 
 }
 
+struct FileRecordParams {
+	void *obj;
+	const char *FileName;
+	int long long NumSamples;
+};
+
+void RunFileRecord(void *PtrIn) {
+
+	FileRecordParams *Ptr0 = (FileRecordParams *) (PtrIn);
+	FileHandler *pobj = (FileHandler *) Ptr0->obj;
+	char *FileName = (char*) Ptr0->FileName;
+	int long long Ns = Ptr0->NumSamples;
+
+	cout << "Saving to file" << endl;
+
+	pobj->Record2File(FileName, Ns);
+
+	cout << "Finished File" << endl;
+	stop_signal_called = true;
+
+}
+
+void RunFileRead(void *PtrIn) {
+
+	FileRecordParams *Ptr0 = (FileRecordParams *) (PtrIn);
+	FileHandler *pobj = (FileHandler *) Ptr0->obj;
+	char *FileName = (char*) Ptr0->FileName;
+	int long long Ns = Ptr0->NumSamples;
+	int Loop = int(Ns);
+
+	pobj->ContinueRead(FileName, Loop);
+
+	cout << "Finished File" << endl;
+	stop_signal_called = true;
+
+}
+
 int UHD_SAFE_MAIN(int argc, char *argv[]){
 //cout << "!!!Hello World!!!" << endl; // prints !!!Hello World!!!
 
 	uhd::msg::register_handler(&my_handler);
 	uhd::set_thread_priority_safe();
-
-	NSamp =0;
-	NPack = 0;
 	//variables to be set by po
 	std::string args, file, type, ant, subdev, ref, wirefmt, mode;
 	size_t total_num_samps, spb;
@@ -493,44 +531,38 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 //        std::cout << "Packet size tracking enabled - will only recv one packet at a time!" << std::endl;
 
 
+	StatFile = fopen("Statuses.txt","wt");
+	fprintf(StatFile,"Starting\n");
+	fflush(StatFile);
 
+	double NumSamplesPrint = TIME2PRINT * rate;
 
+	double log2N = floor(log10(NumSamplesPrint)/log10(2.0)+0.5);
+	unsigned long long m = (log2N);
+	Time2PrintMask = (unsigned long long) (1) << m;
+	Time2PrintMask--;
+	//cout<<"Time2PrintMask "<<Time2PrintMask<<endl;
 
-    int policy, res;
+	int policy, res;
 
-    struct sched_param param;
+	struct sched_param param;
 
-    if ((policy = sched_getscheduler(getpid())) == -1)
-    {
-        perror("sched_getscheduler");
-        exit(EXIT_FAILURE);
-    }
+	if ((policy = sched_getscheduler(getpid())) == -1) {
+		perror("sched_getscheduler");
+		exit(EXIT_FAILURE);
+	}
 
-    if ((res = sched_getparam(getpid(), &param)) == -1)
-    {
-        perror("sched_getparam");
-        exit(EXIT_FAILURE);
-    }
+	if ((res = sched_getparam(getpid(), &param)) == -1) {
+		perror("sched_getparam");
+		exit(EXIT_FAILURE);
+	}
 
-    std::cout << " ORIGINAL: ";
-    std::cout << "policy=" << ((policy == SCHED_FIFO)  ? "SCHED_FIFO" :
-                               (policy == SCHED_RR)    ? "SCHED_RR" :
-                               (policy == SCHED_OTHER) ? "SCHED_OTHER" :
-                                                          "???")
-              << ", priority=" << param.sched_priority << std::endl;
-
-
-
-
-
-
-
-
-
-
-
-
-
+	std::cout << " ORIGINAL: ";
+	std::cout << "policy="
+			<< ((policy == SCHED_FIFO) ? "SCHED_FIFO" :
+				(policy == SCHED_RR) ? "SCHED_RR" :
+				(policy == SCHED_OTHER) ? "SCHED_OTHER" : "???")
+			<< ", priority=" << param.sched_priority << std::endl;
 
 	int OperationMode = -1;
 
@@ -552,12 +584,19 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 
 	//create a usrp device
 	std::cout << std::endl;
+	//args += boost::str(boost::format(",master_clock_rate=%f") % 184.32e6);
 	std::cout << boost::format("Creating the usrp device with: %s...") % args
 			<< std::endl;
 	uhd::usrp::multi_usrp::sptr usrp = uhd::usrp::multi_usrp::make(args);
 
 	//Lock mboard clocks
 	usrp->set_clock_source(ref);
+
+	//usrp->set_master_clock_rate(184.32e6);
+
+///	double ClkRate = usrp->get_master_clock_rate(0);
+//	cout<<" Clock Rate "<<ClkRate<<endl;
+
 	bool PerformAGC = true;
 
 	if (OperationMode == 2) { //Tx
@@ -735,43 +774,15 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 		if (vm.count("loop")) {
 			LoopMode = true;
 		}
-		cout << "Playing from file" << endl;
-		unsigned long long CollectedSamples = 0;
-		struct stat file_stats;
-		stat(file.c_str(), &file_stats);
-		long long FileSize = file_stats.st_size;
-		NumSamplesFile = FileSize >> 2;
-		int BatchSize = SAMPS_PER_BUFF * 32;
-		long long NumBatches = NumSamplesFile/BatchSize;
-		if((NumBatches*BatchSize) < NumSamplesFile)
-		{
-			NumBatches++;
+
+		int LoopModeint = 0;
+		if (LoopMode) {
+			LoopModeint = 1;
 		}
-		NumSamplesFile = NumBatches * BatchSize;
-		FILE *infile = fopen(file.c_str(), "rb");
 
+		objFile.SetStreamer(&objBuffers, &objReqQue);
 
-		bool EndFile = false;
-		while (objBuffers.NumBuffers > 0) {
-			complex<short> *NewBuffer = objBuffers.GetMultipleWriteBuffer();
-			int n = fread(NewBuffer, 4, BatchSize, infile);
-			CollectedSamples += n;
-			if (n < BatchSize) {
-				EndFile = true;
-				memset((void*) (NewBuffer + n), 0, (BatchSize - n) << 2);
-				objBuffers.AdvanceWriteBuffer(32);
-
-				if (LoopMode) {
-					fseek(infile, 0, 3);
-					EndFile = false;
-				} else {
-					break;
-				}
-
-			}
-
-			objBuffers.AdvanceWriteBuffer(32);
-		}
+		objFile.FirstRead(file.c_str(), LoopModeint);
 
 		//Start Streaming
 
@@ -781,94 +792,104 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 		objSpec.SetStreamer(&objBuffers, &objReqQue);
 		boost::thread workerThread(RunStreamer, (void *) &objStreamer);
 
-		  pthread_t threadID = (pthread_t) workerThread.native_handle();
+		pthread_t threadID = (pthread_t) workerThread.native_handle();
 
-		    struct sched_param param;
-		    int retcode;
-		    if ((retcode = pthread_getschedparam(threadID, &policy, &param)) != 0)
-		    {
-		        errno = retcode;
-		        perror("pthread_getschedparam");
-		        exit(EXIT_FAILURE);
-		    }
-
-		    std::cout << "INHERITED: ";
-		    std::cout << "policy=" << ((policy == SCHED_FIFO)  ? "SCHED_FIFO" :
-		                               (policy == SCHED_RR)    ? "SCHED_RR" :
-		                               (policy == SCHED_OTHER) ? "SCHED_OTHER" :
-		                                                         "???")
-		              << ", priority=" << param.sched_priority << std::endl;
-
-		    param.sched_priority = 55;
-
-		        if ((retcode = pthread_setschedparam(threadID, policy, &param)) != 0)
-		        {
-		            errno = retcode;
-		            perror("pthread_setschedparam");
-		            exit(EXIT_FAILURE);
-		        }
-
-
-		long long CollectedInFile = 0;
-		cout<<"Read file again"<<endl;
-		if (EndFile and not LoopMode) {
-			fclose(infile);
-		} else {
-			if (EndFile and LoopMode) {
-				fseek(infile, 0, 3);
-
-			}
-
-			while (not stop_signal_called) {
-				while (1) {
-					int NumBuffers = objBuffers.NumBuffers;
-
-					if (NumBuffers > 32) {
-						break;
-					}
-
-					boost::this_thread::sleep(boost::posix_time::milliseconds(1));
-
-				}
-				complex<short> *NewBuffer = objBuffers.GetMultipleWriteBuffer();
-				int n = fread(NewBuffer, 4, BatchSize, infile);
-				CollectedSamples += n;
-				CollectedInFile += n;
-				if((CollectedInFile &0xFFFFFF) == 0)
-					cout<<"Read "<<CollectedSamples<<endl;
-				if (n < BatchSize) {
-					EndFile = true;
-					if( n > 0)
-					{
-						memset((void*) (NewBuffer + n), 0, (BatchSize - n) << 2);
-						objBuffers.AdvanceWriteBuffer(32);
-						CollectedSamples += (BatchSize - n);
-					}
-
-					if (LoopMode) {
-						fseek(infile, 0, 3);
-						CollectedInFile = 0;
-					} else {
-						break;
-					}
-
-				}
-
-				objBuffers.AdvanceWriteBuffer(32);
-			}
-
+		struct sched_param param;
+		int retcode;
+		if ((retcode = pthread_getschedparam(threadID, &policy, &param)) != 0) {
+			errno = retcode;
+			perror("pthread_getschedparam");
+			exit(EXIT_FAILURE);
 		}
 
+		std::cout << "INHERITED: ";
+		std::cout << "policy="
+				<< ((policy == SCHED_FIFO) ? "SCHED_FIFO" :
+					(policy == SCHED_RR) ? "SCHED_RR" :
+					(policy == SCHED_OTHER) ? "SCHED_OTHER" : "???")
+				<< ", priority=" << param.sched_priority << std::endl;
 
+		param.sched_priority = 55;
 
-
-		if(LoopMode)
-		{
-			fclose(infile);
+		if ((retcode = pthread_setschedparam(threadID, policy, &param)) != 0) {
+			errno = retcode;
+			perror("pthread_setschedparam");
+			exit(EXIT_FAILURE);
 		}
 
-		while(not stop_signal_called)
-		{
+		cpu_set_t cpuset;
+		// CPU_ZERO: This macro initializes the CPU set set to be the empty set.
+		CPU_ZERO(&cpuset);
+		// CPU_SET: This macro adds cpu to the CPU set set.
+		CPU_SET(10, &cpuset);
+		int set_result = pthread_setaffinity_np(threadID,
+				sizeof(cpu_set_t), &cpuset);
+		if (set_result != 0) {
+
+			cout << "pthread_setaffinity_np error" << endl;
+		}
+		const int get_affinity = pthread_setaffinity_np(threadID,
+				sizeof(cpu_set_t), &cpuset);
+		if (get_affinity != 0) {
+
+			cout << "pthread_getaffinity_np error" << endl;
+		}
+
+		FileRecordParams Params;
+		Params.obj = (void *) &objFile;
+		Params.FileName = file.c_str();
+
+		Params.NumSamples = LoopModeint;
+		//RunFileRecord( (void*) (&Params));
+
+		boost::thread FileThread = boost::thread(RunFileRead,
+				(void*) (&Params));
+
+		pthread_t threadID2 = (pthread_t) FileThread.native_handle();
+		cout << "Setting Priority File" << endl;
+
+		if ((retcode = pthread_getschedparam(threadID2, &policy, &param))
+				!= 0) {
+			errno = retcode;
+			perror("pthread_getschedparam");
+			exit(EXIT_FAILURE);
+		}
+
+		std::cout << "INHERITED: ";
+		std::cout << "policy="
+				<< ((policy == SCHED_FIFO) ? "SCHED_FIFO" :
+					(policy == SCHED_RR) ? "SCHED_RR" :
+					(policy == SCHED_OTHER) ? "SCHED_OTHER" : "???")
+				<< ", priority=" << param.sched_priority << std::endl;
+
+		policy = SCHED_FIFO;
+		param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+
+		if ((retcode = pthread_setschedparam(threadID2, policy, &param)) != 0) {
+			errno = retcode;
+			perror("pthread_setschedparam");
+			exit(EXIT_FAILURE);
+		}
+
+		cout << "Setting Affinity File" << endl;
+
+		// CPU_ZERO: This macro initializes the CPU set set to be the empty set.
+		CPU_ZERO(&cpuset);
+		// CPU_SET: This macro adds cpu to the CPU set set.
+		CPU_SET(8, &cpuset);
+		const int set_result2 = pthread_setaffinity_np(threadID2,
+				sizeof(cpu_set_t), &cpuset);
+		if (set_result2 != 0) {
+
+			cout << "pthread_setaffinity_np error" << endl;
+		}
+		const int  get_affinity2 = pthread_setaffinity_np(threadID2,sizeof(cpu_set_t), &cpuset);
+		if (get_affinity2 != 0) {
+
+			cout << "pthread_getaffinity_np error" << endl;
+		}
+
+		while (not stop_signal_called) {
 			boost::this_thread::sleep(boost::posix_time::milliseconds(1000));
 
 		}
@@ -878,61 +899,69 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 
 		Streamer objStreamer(&Params);
 		objSpec.SetStreamer(&objBuffers, &objReqQue);
+		objFile.SetStreamer(&objBuffers, &objReqQue);
+		objFile.SetParams(rate, freq, gain);
+		/*
+		 policy = SCHED_RR;
+		 param.sched_priority = 2;
 
+		 if ((res = sched_setscheduler(getpid(), policy, &param)) == -1)
+		 {
+		 perror("sched_setscheduler");
+		 exit(EXIT_FAILURE);
+		 }
 
+		 */
 
-
-
-
-/*
-	    policy = SCHED_RR;
-	    param.sched_priority = 2;
-
-	    if ((res = sched_setscheduler(getpid(), policy, &param)) == -1)
-	    {
-	        perror("sched_setscheduler");
-	        exit(EXIT_FAILURE);
-	    }
-
-*/
-
-
+		boost::thread FileThread;
 
 		boost::thread workerThread(RunStreamer, (void *) &objStreamer);
 
-		 pthread_t threadID = (pthread_t) workerThread.native_handle();
+		pthread_t threadID = (pthread_t) workerThread.native_handle();
 
-			    struct sched_param param;
-			    int retcode;
-			    if ((retcode = pthread_getschedparam(threadID, &policy, &param)) != 0)
-			    {
-			        errno = retcode;
-			        perror("pthread_getschedparam");
-			        exit(EXIT_FAILURE);
-			    }
+		struct sched_param param;
+		int retcode;
+		if ((retcode = pthread_getschedparam(threadID, &policy, &param)) != 0) {
+			errno = retcode;
+			perror("pthread_getschedparam");
+			exit(EXIT_FAILURE);
+		}
 
-			    std::cout << "INHERITED: ";
-			    std::cout << "policy=" << ((policy == SCHED_FIFO)  ? "SCHED_FIFO" :
-			                               (policy == SCHED_RR)    ? "SCHED_RR" :
-			                               (policy == SCHED_OTHER) ? "SCHED_OTHER" :
-			                                                         "???")
-			              << ", priority=" << param.sched_priority << std::endl;
+		std::cout << "INHERITED: ";
+		std::cout << "policy="
+				<< ((policy == SCHED_FIFO) ? "SCHED_FIFO" :
+					(policy == SCHED_RR) ? "SCHED_RR" :
+					(policy == SCHED_OTHER) ? "SCHED_OTHER" : "???")
+				<< ", priority=" << param.sched_priority << std::endl;
 
-			    policy = SCHED_FIFO;
-			    param.sched_priority =  sched_get_priority_max(SCHED_FIFO);
+		policy = SCHED_FIFO;
+		param.sched_priority = sched_get_priority_max(SCHED_FIFO);
 
-			        if ((retcode = pthread_setschedparam(threadID, policy, &param)) != 0)
-			        {
-			            errno = retcode;
-			            perror("pthread_setschedparam");
-			            exit(EXIT_FAILURE);
-			        }
+		if ((retcode = pthread_setschedparam(threadID, policy, &param)) != 0) {
+			errno = retcode;
+			perror("pthread_setschedparam");
+			exit(EXIT_FAILURE);
+		}
 
+		cpu_set_t cpuset;
+		// CPU_ZERO: This macro initializes the CPU set set to be the empty set.
+		CPU_ZERO(&cpuset);
+		// CPU_SET: This macro adds cpu to the CPU set set.
+		CPU_SET(10, &cpuset);
+		const int set_result = pthread_setaffinity_np(threadID,
+				sizeof(cpu_set_t), &cpuset);
+		if (set_result != 0) {
 
+			cout << "pthread_setaffinity_np error" << endl;
+		}
+		const int get_affinity = pthread_setaffinity_np(threadID,
+				sizeof(cpu_set_t), &cpuset);
+		if (get_affinity != 0) {
 
+			cout << "pthread_getaffinity_np error" << endl;
+		}
 
 //		displayAndChange(workerThread);
-
 
 		if (PerformAGC) {
 			//agc<std::complex<short> >(usrp, "sc16", wirefmt, file, spb, total_num_samps, total_time, bw_summary, stats, null, enable_size_map, continue_on_bad_packet,gain);
@@ -945,17 +974,80 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 			cout << "Creating Spectrum" << endl;
 			objSpec.CreateOutput(file.c_str(), float(rate), float(freq));
 		} else if (OperationMode == 1) {
-			cout << "Saving to file" << endl;
-			objSpec.Record2File(file.c_str(), total_num_samps);
-			cout << "Finished File" << endl;
+
+			FileRecordParams Params;
+			Params.obj = (void *) &objFile;
+			Params.FileName = file.c_str();
+			Params.NumSamples = total_num_samps;
+			//RunFileRecord( (void*) (&Params));
+
+			FileThread = boost::thread(RunFileRecord, (void*) (&Params));
+
+			pthread_t threadID2 = (pthread_t) FileThread.native_handle();
+
+			cout << "Setting Priority File" << endl;
+			struct sched_param param;
+			int retcode;
+			if ((retcode = pthread_getschedparam(threadID2, &policy, &param))
+					!= 0) {
+				errno = retcode;
+				perror("pthread_getschedparam");
+				exit(EXIT_FAILURE);
+			}
+
+			std::cout << "INHERITED: ";
+			std::cout << "policy="
+					<< ((policy == SCHED_FIFO) ? "SCHED_FIFO" :
+						(policy == SCHED_RR) ? "SCHED_RR" :
+						(policy == SCHED_OTHER) ? "SCHED_OTHER" : "???")
+					<< ", priority=" << param.sched_priority << std::endl;
+
+			policy = SCHED_FIFO;
+			param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+
+			if ((retcode = pthread_setschedparam(threadID2, policy, &param))
+					!= 0) {
+				errno = retcode;
+				perror("pthread_setschedparam");
+				exit(EXIT_FAILURE);
+			}
+
+			cout << "Setting Affinity File" << endl;
+
+			cpu_set_t cpuset;
+			// CPU_ZERO: This macro initializes the CPU set set to be the empty set.
+			CPU_ZERO(&cpuset);
+			// CPU_SET: This macro adds cpu to the CPU set set.
+			CPU_SET(8, &cpuset);
+			const int set_result = pthread_setaffinity_np(threadID2,
+					sizeof(cpu_set_t), &cpuset);
+			if (set_result != 0) {
+
+				cout << "pthread_setaffinity_np error" << endl;
+			}
+			const int get_affinity = pthread_setaffinity_np(threadID2,
+					sizeof(cpu_set_t), &cpuset);
+			if (get_affinity != 0) {
+
+				cout << "pthread_getaffinity_np error" << endl;
+			}
+			while (not stop_signal_called) {
+				boost::this_thread::sleep(
+						boost::posix_time::milliseconds(1000));
+
+			}
+
 		}
-		stop_signal_called = true;
+
 	}
 
 	workerThread.join();
+	fclose(StatFile);
 	cout << "Finished" << endl;
 
 //float *y = aligned_alloc(32, 1024*sizeof(float));
+
+	//cout<<"Errors "<<NumErrors<<endl;
 
 	return 0;
 }

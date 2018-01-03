@@ -8,7 +8,8 @@
 #ifndef DEFS_H_
 #define DEFS_H_
 
-
+#define VERSION 1.0
+#define HEADER_LENGTH 8*5
 
 #include <uhd/types/tune_request.hpp>
 #include <uhd/utils/thread_priority.hpp>
@@ -31,7 +32,7 @@
 #define MFFT 200
 #define NFFT 32768
 #define SAMPS_PER_BUFF 8192
-
+#define TIME2PRINT 2
 
 struct StreamerParams
 {

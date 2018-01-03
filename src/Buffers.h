@@ -11,21 +11,24 @@
 using namespace std;
 #include <complex>
 #include <vector>
-#define NUM_BUFFERS 8192
+#include <atomic>
 
+#define NUM_BUFFERS 65536
+//#include <pthread.h>
 
 
 class Buffers {
-	int PtrRd = 0;
-	int PtrWr = 0;
 	unsigned long long Overflows = 0;
-
+	bool Lock = false;
 	complex<short> *BigBuffer;
+	//pthread_mutex_t lock;
 
 	std::complex<short> *Buffers1[NUM_BUFFERS];
 public:
+	int PtrRd = 0;
+	int PtrWr = 0;
 	int MinAvailable = NUM_BUFFERS;
-	int NumBuffers = NUM_BUFFERS;
+	std::atomic<int> NumBuffers;
 	Buffers(int samps_per_buff);
 	virtual ~Buffers();
 	void Reset(void) {
@@ -41,8 +44,46 @@ public:
 		{
 			return 0;
 		}
+
+//		if(NumBuffers >=  (NUM_BUFFERS))
+//		{
+//			cout<<"Read Error "<<NumBuffers<<" "<<PtrWr<<" "<<PtrRd<<endl;
+//			exit(-1);
+//		}
+
+
 		return Buffers1[PtrRd];
 	}
+
+	void ReleaseReadBuffer(int AddNumBuffers)
+	{
+			Lock = true;
+	//		 pthread_mutex_lock(&lock);
+	//		 NumBuffers += AddNumBuffers;
+	//		 pthread_mutex_unlock(&lock);
+			 /*int Diff = PtrWr-PtrRd;
+				if(Diff < 0)
+					Diff += NUM_BUFFERS;
+			*/
+			NumBuffers +=AddNumBuffers;
+
+
+		//	cout<<"RD "<<NumBuffers<<" "<<PtrWr<<" "<<PtrRd<<" "<<Diff<<endl;
+
+
+			Lock = false;
+
+	}
+
+
+		void AdvanceReadBuffer(void) {
+			int NewPtr = PtrRd;
+			NewPtr++;
+			NewPtr &= (NUM_BUFFERS - 1);
+
+			PtrRd = NewPtr;
+		//	cout<<"RD Wr Rd "<<PtrWr<<" "<<PtrRd<<endl;
+		}
 
 	std::complex<short> *GetWriteBuffer(void)
 	{
@@ -56,41 +97,50 @@ public:
 
 		}
 
-		if(NumBuffers < MinAvailable)
-		{
-			MinAvailable = NumBuffers;
-	//		cout <<NumBuffers<<endl;
-		}
+//		 pthread_mutex_lock(&lock);
+//		 NumBuffers--;
+//		 pthread_mutex_unlock(&lock);
 
 		NumBuffers--;
+
 		return Buffers1[PtrWr];
 	}
 
 
 
-	std::complex<short> *GetMultipleWriteBuffer()
+	std::complex<short> *GetMultipleWriteBuffer(int N)
 	{
-			return Buffers1[PtrWr];
+		if(NumBuffers < N)
+		{
+			Overflows++;
+			cout<<"Buffer Ovf"<<endl;
+			NumBuffers = NUM_BUFFERS;
+			exit(-1);
+		}
+//		cout<<"Write "<<NumBuffers<<endl;
+//		pthread_mutex_lock(&lock);
+//		NumBuffers -= N;
+//		pthread_mutex_unlock(&lock);
+
+		NumBuffers -=N;
+
+//		if(Lock)
+//		{
+//			cout<<"Write "<<NumBuffers<<endl;
+//		}
+		return Buffers1[PtrWr];
 	}
 
+	void AdvanceWriteBuffer(int Advance)
+		{
+			int NewPtr = PtrWr;
+			NewPtr+= Advance;
+			NewPtr &= (NUM_BUFFERS - 1);
+			PtrWr = NewPtr;
+		}
 
 
 
-
-	void ReleaseReadBuffer(int AddNumBuffers)
-	{
-		NumBuffers += AddNumBuffers;
-	}
-
-
-	void AdvanceReadBuffer(void) {
-		int NewPtr = PtrRd;
-		NewPtr++;
-		NewPtr &= (NUM_BUFFERS - 1);
-
-		PtrRd = NewPtr;
-	//	cout<<"RD Wr Rd "<<PtrWr<<" "<<PtrRd<<endl;
-	}
 
 	void ReleaseWriteBuffer(void) {
 		int NewPtr = PtrWr;
@@ -101,14 +151,16 @@ public:
 
 	}
 
-	void AdvanceWriteBuffer(int Advance)
-	{
-		NumBuffers -= Advance;
+	void ReleaseMultipleWriteBuffer(int N) {
 		int NewPtr = PtrWr;
-		NewPtr+= Advance;
+		NewPtr += N;
 		NewPtr &= (NUM_BUFFERS - 1);
 		PtrWr = NewPtr;
+	//	cout<<"WR Wr Rd "<<PtrWr<<" "<<PtrRd<<endl;
+
 	}
+
+
 
 };
 

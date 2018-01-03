@@ -14,14 +14,16 @@ Buffers::Buffers(int samps_per_buff) {
 
 	for (int ii = 0; ii < NUM_BUFFERS; ii++) {
 		Buffers1[ii] =  & (BigBuffer[ii*samps_per_buff]);
+		NumBuffers = NUM_BUFFERS;
 	}
-
+	//pthread_mutex_init(&lock, NULL);
 }
 
 Buffers::~Buffers() {
 	// TODO Auto-generated destructor stub
-
+	cout<<"Exit Buffers"<<endl;
 	free(BigBuffer);
 
 }
+
 

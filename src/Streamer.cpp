@@ -5,9 +5,11 @@
  *      Author: x300
  */
 
-extern bool stop_signal_called;
 
 #include "Streamer.h"
+
+extern bool stop_signal_called;
+extern FILE *StatFile;
 
 Streamer::Streamer(struct StreamerParams *Params) {
 	// TODO Auto-generated constructor stub
@@ -24,6 +26,10 @@ void Streamer::Run(void) {
 	//create a receive streamer
 	uhd::stream_args_t stream_args("sc16", "sc16");
 	uhd::rx_streamer::sptr rx_stream = usrp->get_rx_stream(stream_args);
+	const size_t samps_per_buff1 = rx_stream->get_max_num_samps();
+
+	cout<<"Max Samps " <<samps_per_buff1<<endl;
+	cout<<"Max Samps " <<samps_per_buff1<<endl;
 
 	uhd::rx_metadata_t md;
 	bool overflow_message = true;
@@ -33,10 +39,10 @@ void Streamer::Run(void) {
 			uhd::stream_cmd_t::STREAM_MODE_NUM_SAMPS_AND_DONE);
 	bool continue_on_bad_packet = false;
 
-	unsigned int LLog = 1 << 20;
-	unsigned int MaskLog = LLog - 1;
-	unsigned int PtrLog = 0;
-	double *LogTime = new double[LLog];
+//	unsigned int LLog = 1 << 20;
+//	unsigned int MaskLog = LLog - 1;
+//	unsigned int PtrLog = 0;
+//	double *LogTime = new double[LLog];
 
 	cout
 			<< "//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
@@ -78,51 +84,59 @@ void Streamer::Run(void) {
 		rx_stream->issue_stream_cmd(stream_cmd);
 
 		boost::this_thread::sleep(boost::posix_time::milliseconds(10));
-		int BatchSize = SAMPS_PER_BUFF;
+	//	int BatchSize = SAMPS_PER_BUFF;
+
+		int NumBuffers2Write = 128;
 
 		while (not stop_signal_called
 				and (num_requested_samples > num_total_samps)) {
-
+/*
 			struct timespec tp0, tp1;
 			clock_gettime(CLOCK_MONOTONIC, &tp0);
 
 			LogTime[PtrLog++] = tp0.tv_sec;
 			LogTime[PtrLog++] = tp0.tv_nsec;
 			PtrLog &= MaskLog;
+*/
+	//		int n = 0;
 
-			int n = 0;
-			complex<short> *NewBuffer = Buff1->GetWriteBuffer();
+			complex<short> *NewBuffer = Buff1->GetMultipleWriteBuffer(NumBuffers2Write);
+			size_t num_rx_samps;
+			size_t n = 0;
 
-			for (int kk = 0; kk < 1; kk++) {
-				size_t num_rx_samps = rx_stream->recv(NewBuffer + n, BatchSize,
-						md, 3.0, false);
+			for(int ii = 0 ; ii < NumBuffers2Write; ii++)
+			{
+				num_rx_samps = rx_stream->recv(NewBuffer + n, SAMPS_PER_BUFF,md, 3.0, false);
 				n += num_rx_samps;
 
 				if (md.error_code == uhd::rx_metadata_t::ERROR_CODE_TIMEOUT) {
-					TimeOut = true;
-					std::cout << boost::format("Timeout while streaming")
-							<< std::endl;
-					break;
-				}
-
-				if (md.error_code == uhd::rx_metadata_t::ERROR_CODE_OVERFLOW) {
-					if (overflow_message) {
-						Overflow = true;
-						cout << "Drop/Overflow Error" << endl;
-
-						FILE *fid = fopen("LogOut.dat", "wb");
-						fwrite(LogTime, 8, LLog, fid);
-						cout << " PtrLog " << PtrLog << endl;
-						fclose(fid);
-						fprintf(stderr,"EROR Rx Drop/Overflow Error\n");
-
-//					boost::this_thread::sleep(boost::posix_time::microseconds(1000));
-
-						exit(-1);
+						TimeOut = true;
+						std::cout << boost::format("Timeout while streaming")
+								<< std::endl;
+						break;
 					}
-					continue;
-				}
-				if (md.error_code != uhd::rx_metadata_t::ERROR_CODE_NONE) {
+
+					if (md.error_code == uhd::rx_metadata_t::ERROR_CODE_OVERFLOW) {
+						if (overflow_message) {
+							Overflow = true;
+							cout << "Drop/Overflow Error" << endl;
+	/*
+							FILE *fid = fopen("LogOut.dat", "wb");
+							fwrite(LogTime, 8, LLog, fid);
+							cout << " PtrLog " << PtrLog << endl;
+							fclose(fid);
+							fprintf(stderr,"EROR Rx Drop/Overflow Error\n");
+
+							*/
+
+	//					boost::this_thread::sleep(boost::posix_time::microseconds(1000));
+
+							fprintf(StatFile, "EROR Drop\n");
+							fflush(StatFile);
+						}
+					}
+			}
+			/*	if (md.error_code != uhd::rx_metadata_t::ERROR_CODE_NONE) {
 					std::string error = str(
 							boost::format("Receiver error: %s")
 									% md.strerror());
@@ -132,15 +146,17 @@ void Streamer::Run(void) {
 					} else
 						throw std::runtime_error(error);
 				}
+*/
 
-			}
-			clock_gettime(CLOCK_MONOTONIC, &tp1);
+	/*
+
+	 		clock_gettime(CLOCK_MONOTONIC, &tp1);
 			//					 double newtime = diff_time(tp0,tp1);
 			LogTime[PtrLog++] = tp1.tv_sec;
 			LogTime[PtrLog++] = tp1.tv_nsec;
 			PtrLog &= MaskLog;
-
-			Buff1->ReleaseWriteBuffer();
+*/
+			Buff1->AdvanceWriteBuffer(NumBuffers2Write);
 
 			num_total_samps += n;
 
@@ -161,9 +177,12 @@ void Streamer::Run(void) {
 
 	}
 
+	cout<<"Exiting Streamer"<<endl;
+	/*
 	FILE *fid = fopen("LogOut.dat", "wb");
 	fwrite(LogTime, 8, LLog, fid);
 	cout << " PtrLog " << PtrLog << endl;
 	fclose(fid);
+	*/
 
 }

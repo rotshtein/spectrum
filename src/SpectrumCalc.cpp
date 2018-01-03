@@ -7,7 +7,7 @@
 
 #include "SpectrumCalc.h"
 extern bool stop_signal_called;
-
+extern FILE *StatFile;
 SpectrumCalc::SpectrumCalc() {
 	// TODO Auto-generated constructor stub
 	hamm = (fftwf_complex*) fftw_malloc(sizeof(fftwf_complex) * N);
@@ -149,11 +149,11 @@ int SpectrumCalc::Record2File( const char *FileName, int long long total_num_sam
 //	  std::ofstream outfile;
 //	  outfile.open(FileName, std::ofstream::binary);
 
-	int NumBuffers2Write = 256;
+	int NumBuffers2Write = 4096;
 	pBuffers->Reset();
 	FILE *outfile;
 	outfile = fopen(FileName,"wb");
-	long long num_samples_collected = 0;
+	int long long num_samples_collected = 0;
 
 	total_num_samps += SAMPS_PER_BUFF;
 
@@ -174,7 +174,7 @@ int SpectrumCalc::Record2File( const char *FileName, int long long total_num_sam
 				break;
 			}
 
-			boost::this_thread::sleep(boost::posix_time::microseconds(100));
+			boost::this_thread::sleep(boost::posix_time::microseconds(1));
 		}
 
 		{
@@ -189,20 +189,26 @@ int SpectrumCalc::Record2File( const char *FileName, int long long total_num_sam
 
 			if(NumAvailableBuffers == NumBuffers2Write)
 			{
-				struct timespec tp0, tp1;
-				clock_gettime(CLOCK_MONOTONIC, &tp0);
+	//			struct timespec tp0, tp1;
+	//			clock_gettime(CLOCK_MONOTONIC, &tp0);
 
 
-				fwrite((const char*) BaseBuffer,1,SAMPS_PER_BUFF*4*NumBuffers2Write,outfile);
+				int m = fwrite((const char*) BaseBuffer,1,SAMPS_PER_BUFF*4*NumBuffers2Write,outfile);
+				if(m == 0)
+				{
+					fprintf(StatFile, "EROR DISK\n");
+					fflush(StatFile);
+					stop_signal_called = true;
+				}
 
-				 clock_gettime(CLOCK_MONOTONIC, &tp1);
-				 double newtime = diff_time(tp0,tp1);
-				 SumTime += newtime;
-				 if(newtime > MaxTime)
-				 {
-					 MaxTime = newtime;
-					 cout<< MaxTime <<endl;
-				 }
+		//		 clock_gettime(CLOCK_MONOTONIC, &tp1);
+	//			 double newtime = diff_time(tp0,tp1);
+		//		 SumTime += newtime;
+			//	 if(newtime > MaxTime)
+				// {
+					// MaxTime = newtime;
+					 //cout<< MaxTime <<endl;
+				// }
 
 
 				 pBuffers->ReleaseReadBuffer(NumBuffers2Write);
@@ -213,10 +219,13 @@ int SpectrumCalc::Record2File( const char *FileName, int long long total_num_sam
 		}
 
 		num_samples_collected += SAMPS_PER_BUFF;
-		if((num_samples_collected & 67108863) == 0)
+		if((num_samples_collected & 0x7FFFFFFF) == 0)
 		{
 			cout <<"Collected "<<num_samples_collected<<" Buffers "<< pBuffers->NumBuffers<<endl;
-			fprintf(stderr,"RCRD Samples: %lld of: %lld\n",num_samples_collected,total_num_samps);
+			fprintf(StatFile,"RCRD Samples: %lld of: %lld\n",num_samples_collected,total_num_samps);
+			fflush(StatFile);
+
+
 		}
 	}
 
