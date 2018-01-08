@@ -145,7 +145,7 @@ float SpectrumCalc::CalcPower(short *In, int Length) {
 int SpectrumCalc::Record2File( const char *FileName, int long long total_num_samps) {
 
 	int NumAvailableBuffers = 0;
-	double MaxTime = 0;
+	//double MaxTime = 0;
 //	  std::ofstream outfile;
 //	  outfile.open(FileName, std::ofstream::binary);
 
@@ -158,7 +158,7 @@ int SpectrumCalc::Record2File( const char *FileName, int long long total_num_sam
 	total_num_samps += SAMPS_PER_BUFF;
 
 	pStreamReq->InsertRequest(total_num_samps);
-	bool First = true;
+	//bool First = true;
 	double SumTime = 0.0;
 	complex <short> *BaseBuffer = 0;
 	while((num_samples_collected <  total_num_samps) and (not stop_signal_called))

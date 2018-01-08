@@ -7,8 +7,8 @@
 
 #include "TxStreamer.h"
 extern bool stop_signal_called;
-extern unsigned long long NSamp;
-extern unsigned long long NPack;
+//extern unsigned long long NSamp;
+//extern unsigned long long NPack;
 extern long long NumSamplesFile;
 extern unsigned long long Time2PrintMask;
 extern FILE *StatFile;
@@ -42,13 +42,13 @@ void TxStreamer::Run() {
 	 unsigned int PtrLog = 0;
 	 double *LogTime = new double [LLog];
 	 */
-	struct timespec tp0, tp1;
+	struct timespec tp0/*, tp1*/;
 	long long Round = 0;
 	long long PlayedRound = 0;
 	long long PlayedTotal = 0;
 
 	double PacketRate = Rate / double(SAMPS_PER_BUFF);
-	double InvPacketRate = 1.0 / PacketRate;
+	//double InvPacketRate = 1.0 / PacketRate;
 	clock_gettime(CLOCK_MONOTONIC, &tp0);
 
 	cout << "Started Streaming " << endl;
