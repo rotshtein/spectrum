@@ -10,6 +10,8 @@ extern bool stop_signal_called;
 extern unsigned long long NSamp;
 extern unsigned long long NPack;
 extern long long NumSamplesFile;
+extern unsigned long long Time2PrintMask;
+extern FILE *StatFile;
 
 TxStreamer::TxStreamer(struct StreamerParams *Params) :
 		Streamer(Params) {
@@ -33,7 +35,7 @@ void TxStreamer::Run() {
 	md.end_of_burst = false;
 	NumTransmittedSamples = 0;
 
-	unsigned int LowRateBatch = SAMPS_PER_BUFF >>3;
+	unsigned int LowRateBatch = SAMPS_PER_BUFF;
 
 	/*unsigned int LLog = 4096;
 	 unsigned int MaskLog = LLog - 1;
@@ -51,11 +53,12 @@ void TxStreamer::Run() {
 
 	cout << "Started Streaming " << endl;
 	cout << "Time " << tp0.tv_sec << " " << tp0.tv_nsec << endl;
-	while (not md.end_of_burst) {
+	while (not md.end_of_burst)
+	{
 
 		complex<short> *NewBuffer = Buff1->GetReadBuffer();
 		if (NewBuffer == 0) {
-
+			cout<<" NO TX Data"<<endl;
 			stop_signal_called = true;
 		}
 
@@ -65,7 +68,9 @@ void TxStreamer::Run() {
 
 		if (stop_signal_called) {
 			tx_stream->send(ZeroBuffer, SAMPS_PER_BUFF, md);
-		} else {
+		}
+		else
+		{
 		//	clock_gettime(CLOCK_MONOTONIC, &tp0);
 			/*
 			 LogTime[PtrLog++] = tp0.tv_sec;
@@ -83,9 +88,9 @@ void TxStreamer::Run() {
 //			else
 //			{
 
-				for(int kk = 0; kk < 8; kk++)
+				for(int kk = 0; kk < 1; kk++)
 				{
-					int k = tx_stream->send(NewBuffer + n , LowRateBatch, md);
+					int k = tx_stream->send(NewBuffer  , LowRateBatch, md);
 					n += k;
 				}
 
@@ -107,16 +112,13 @@ void TxStreamer::Run() {
 
 			 */
 
-			if (n != SAMPS_PER_BUFF) {
-				cout << "Tx Error" << endl;
-			}
+//			if (n != SAMPS_PER_BUFF) {
+//				cout << "Tx Error" << endl;
+//			}
 		}
 		Buff1->ReleaseReadBuffer(1);
 		Buff1->AdvanceReadBuffer();
 		NumTransmittedSamples += SAMPS_PER_BUFF;
-		NSamp = NumTransmittedSamples;
-		NumTransmitedPackets++;
-		NPack = NumTransmitedPackets;
 	/*
 		if ((Rate < MIN_TX_RATE) && (NumTransmitedPackets >= 10)) {
 			//Flow Control
@@ -149,7 +151,7 @@ void TxStreamer::Run() {
 
 		}
 */
-		if ((NumTransmittedSamples & 0xFFFFFF) == 0) {
+		if ((NumTransmittedSamples & Time2PrintMask) == 0) {
 			if(NumTransmittedSamples >= (PlayedTotal + NumSamplesFile))
 			{
 				Round++;
@@ -158,7 +160,8 @@ void TxStreamer::Run() {
 			PlayedRound = NumTransmittedSamples - PlayedTotal;
 
 			cout << "Played Round: " <<Round<<" Samples: "<< PlayedRound<<" of: "<< NumSamplesFile<< endl;
-			fprintf(stderr,"PLAY Round: %lld Samples: %lld of: %lld\n",Round,PlayedRound,NumSamplesFile);
+			fprintf(StatFile,"PLAY Round: %lld Samples: %lld of: %lld\n",Round,PlayedRound,NumSamplesFile);
+			fflush(StatFile);
 	//		cout << "Time " << tp1.tv_sec << " " << tp1.tv_nsec << endl;
 		}
 	}
