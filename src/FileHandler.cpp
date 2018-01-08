@@ -30,7 +30,7 @@ void FileHandler::SetStreamer(Buffers *pBuffersX,  StreamingRequests *pStreamReq
 int FileHandler::Record2File( const char *FileName, int long long total_num_samps) {
 
 	int NumAvailableBuffers = 0;
-	double MaxTime = 0;
+	//double MaxTime = 0;
 //	  std::ofstream outfile;
 //	  outfile.open(FileName, std::ofstream::binary);
 
@@ -53,7 +53,7 @@ int FileHandler::Record2File( const char *FileName, int long long total_num_samp
 	total_num_samps += SAMPS_PER_BUFF;
 
 	pStreamReq->InsertRequest(total_num_samps);
-	bool First = true;
+	//bool First = true;
 	double SumTime = 0.0;
 	complex <short> *BaseBuffer = 0;
 	while((num_samples_collected <  total_num_samps) and (not stop_signal_called))
@@ -217,6 +217,7 @@ int FileHandler::FirstRead(const char *FileName, int LoopMode1)
 
 				}
 			}
+	return 0;
 }
 
 
@@ -287,6 +288,7 @@ int FileHandler::ContinueRead(const char *FileName, int LoopMode1)
 	if (LoopMode) {
 		fclose(infile);
 	}
+	return 0;
 }
 
 
