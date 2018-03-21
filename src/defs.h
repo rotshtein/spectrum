@@ -10,7 +10,8 @@
 
 #define VERSION 1.0
 #define HEADER_LENGTH 8*5
-
+//#define SERVER_VERSION
+//define ETHERNET_10G
 #include <uhd/types/tune_request.hpp>
 #include <uhd/utils/thread_priority.hpp>
 #include <uhd/utils/safe_main.hpp>
@@ -31,7 +32,18 @@
 
 #define MFFT 200
 #define NFFT 32768
-#define SAMPS_PER_BUFF 8192
+#ifdef ETHERNET_10G
+	#define SAMPS_PER_BUFF 7984
+	#define ONE_BATCH 1996
+	#define NUM_BATCHES 4
+
+#else
+	#define SAMPS_PER_BUFF 7986
+
+	#define NUM_BATCHES 22
+	#define ONE_BATCH 363
+#endif
+
 #define TIME2PRINT 2
 
 struct StreamerParams

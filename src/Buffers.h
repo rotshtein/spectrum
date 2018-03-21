@@ -12,8 +12,11 @@ using namespace std;
 #include <complex>
 #include <vector>
 #include <atomic>
-
-#define NUM_BUFFERS 65536
+#ifdef SERVER_VERSION
+	#define NUM_BUFFERS 131072
+#else
+	#define NUM_BUFFERS 32768
+#endif
 //#include <pthread.h>
 
 
@@ -51,9 +54,22 @@ public:
 //			exit(-1);
 //		}
 
-
 		return Buffers1[PtrRd];
 	}
+
+
+	std::complex<short> *GetReadBuffer(int N) {
+
+			if((NumBuffers > (NUM_BUFFERS-(N<<1))))//Guaranteed that there is info
+			{
+				return 0;
+			}
+
+
+
+			return Buffers1[PtrRd];
+		}
+
 
 	void ReleaseReadBuffer(int AddNumBuffers)
 	{
@@ -74,6 +90,17 @@ public:
 			Lock = false;
 
 	}
+
+
+	void AdvanceReadBuffer(int N) {
+				int NewPtr = PtrRd;
+				NewPtr+=N;
+				NewPtr &= (NUM_BUFFERS - 1);
+
+				PtrRd = NewPtr;
+			//	cout<<"RD Wr Rd "<<PtrWr<<" "<<PtrRd<<endl;
+			}
+
 
 
 		void AdvanceReadBuffer(void) {

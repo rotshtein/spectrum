@@ -35,7 +35,6 @@ void TxStreamer::Run() {
 	md.end_of_burst = false;
 	NumTransmittedSamples = 0;
 
-	unsigned int LowRateBatch = SAMPS_PER_BUFF;
 
 	/*unsigned int LLog = 4096;
 	 unsigned int MaskLog = LLog - 1;
@@ -46,21 +45,31 @@ void TxStreamer::Run() {
 	long long Round = 0;
 	long long PlayedRound = 0;
 	long long PlayedTotal = 0;
-
-	double PacketRate = Rate / double(SAMPS_PER_BUFF);
-	//double InvPacketRate = 1.0 / PacketRate;
+	LastPrintSample = 0;
 	clock_gettime(CLOCK_MONOTONIC, &tp0);
 
+	const size_t max_samps_per_packet = tx_stream->get_max_num_samps();
+	size_t tt = max_samps_per_packet*uhd::convert::get_bytes_per_item("fc32");
+	cout<< "Max samps "<<max_samps_per_packet<<endl;
+	cout<<" TT "<<tt<<endl;
 	cout << "Started Streaming " << endl;
 	cout << "Time " << tp0.tv_sec << " " << tp0.tv_nsec << endl;
+	unsigned int  LowRateBatch = max_samps_per_packet;
+	int NumLoops = SAMPS_PER_BUFF/LowRateBatch;
+	NumLoops *= 32;
+
+
+
 	while (not md.end_of_burst)
 	{
 
-		complex<short> *NewBuffer = Buff1->GetReadBuffer();
+		complex<short> *NewBuffer = Buff1->GetReadBuffer(32);
 		if (NewBuffer == 0) {
 			cout<<" NO TX Data"<<endl;
 			stop_signal_called = true;
 		}
+
+		int n = 0;
 
 		if (stop_signal_called) {
 			md.end_of_burst = true;
@@ -78,7 +87,7 @@ void TxStreamer::Run() {
 			 PtrLog &= MaskLog;
 			 */
 
-			int n = 0;
+
 //			if(Rate > MIN_TX_RATE)
 //			{
 //				n = tx_stream->send(NewBuffer, SAMPS_PER_BUFF, md);
@@ -88,11 +97,14 @@ void TxStreamer::Run() {
 //			else
 //			{
 
-				for(int kk = 0; kk < 1; kk++)
+				for(int kk = 0; kk < NumLoops; kk++)
 				{
-					int k = tx_stream->send(NewBuffer  , LowRateBatch, md);
+					int k = tx_stream->send(NewBuffer + n  , LowRateBatch, md);
 					n += k;
 				}
+
+//				int k = tx_stream->send(NewBuffer+n  , LastLoop, md);
+	//			n += k;
 
 	//		}
 
@@ -116,9 +128,9 @@ void TxStreamer::Run() {
 //				cout << "Tx Error" << endl;
 //			}
 		}
-		Buff1->ReleaseReadBuffer(1);
-		Buff1->AdvanceReadBuffer();
-		NumTransmittedSamples += SAMPS_PER_BUFF;
+		Buff1->ReleaseReadBuffer(32);
+		Buff1->AdvanceReadBuffer(32);
+		NumTransmittedSamples += n;
 	/*
 		if ((Rate < MIN_TX_RATE) && (NumTransmitedPackets >= 10)) {
 			//Flow Control
@@ -151,19 +163,21 @@ void TxStreamer::Run() {
 
 		}
 */
-		if ((NumTransmittedSamples & Time2PrintMask) == 0) {
+
+		if ((NumTransmittedSamples - LastPrintSample) >=  Time2PrintMask) {
 			if(NumTransmittedSamples >= (PlayedTotal + NumSamplesFile))
 			{
 				Round++;
 				PlayedTotal += NumSamplesFile;
 			}
 			PlayedRound = NumTransmittedSamples - PlayedTotal;
-
+			LastPrintSample = NumTransmittedSamples;
 			cout << "Played Round: " <<Round<<" Samples: "<< PlayedRound<<" of: "<< NumSamplesFile<< endl;
 			fprintf(StatFile,"PLAY Round: %lld Samples: %lld of: %lld\n",Round,PlayedRound,NumSamplesFile);
 			fflush(StatFile);
-	//		cout << "Time " << tp1.tv_sec << " " << tp1.tv_nsec << endl;
 		}
+
+
 	}
 
 	cout << "Transmitted " << NumTransmittedSamples << endl;

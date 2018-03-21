@@ -20,6 +20,7 @@ protected:
 	StreamingRequests *ReqQue;
 	uhd::usrp::multi_usrp::sptr usrp;
 	long long int num_requested_samples;
+	unsigned long long LastPrintSample = 0;
 	double Rate;
 	double diff_time(struct timespec &tp0, struct timespec &tp1)
 	{

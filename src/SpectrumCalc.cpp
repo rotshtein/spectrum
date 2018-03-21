@@ -90,10 +90,10 @@ float SpectrumCalc::Convert(short *In, int Length) {
 		__m256 y = _mm256_cvtepi32_ps(mInhlf);
 		y = _mm256_mul_ps(y, mK);
 		mSum = _mm256_add_ps(x,mSum);
-		_mm256_store_ps(Out1 + PtrOut, x);
+		_mm256_storeu_ps(Out1 + PtrOut, x);
 		PtrOut += 8;
 		mSum = _mm256_add_ps(y,mSum);
-		_mm256_store_ps(Out1 + PtrOut, y);
+		_mm256_storeu_ps(Out1 + PtrOut, y);
 		PtrOut += 8;
 
 	}

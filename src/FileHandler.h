@@ -19,10 +19,11 @@ class FileHandler {
 	double Rate, Freq, Gain;
 	unsigned long long CollectedSamples = 0;
 	//unsigned long long NumSamplesFile;
-	int BatchSize;
+	int BatchSize = 0, BatchSizeRx = 0, BatchSizeTx = 0;
 	bool EndFile = false;
-	long long CollectedInFile;
-	FILE *infile ;
+	long long CollectedInFile = 0;
+	unsigned int SamplesPerBatch = 0;
+	FILE *infile = NULL;
 
 public:
 	FileHandler();
@@ -37,6 +38,7 @@ public:
 	}
 	int FirstRead(const char *FileName, int LoopMode1);
 	int ContinueRead(const char *FileName, int LoopMode1);
+	void SetBatchSize(void);
 };
 
 #endif /* FILEHANDLER_H_ */

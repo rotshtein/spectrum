@@ -11,9 +11,13 @@ extern long long NumSamplesFile;
 static char Header[8] ={'R','E','C','O','r','d','e','r'};
 extern FILE *StatFile;
 extern unsigned long long Time2PrintMask;
+extern unsigned long MaxSamplesTx;
 FileHandler::FileHandler() {
-	// TODO Auto-generated constructor stub
-
+	Gain = 0;
+	Freq = 0;
+	Rate = 0;
+	pStreamReq = NULL;
+	pBuffers = NULL;
 }
 
 FileHandler::~FileHandler() {
@@ -56,6 +60,8 @@ int FileHandler::Record2File( const char *FileName, int long long total_num_samp
 	//bool First = true;
 	double SumTime = 0.0;
 	complex <short> *BaseBuffer = 0;
+
+	unsigned long long LastPrintSamples = 0;
 	while((num_samples_collected <  total_num_samps) and (not stop_signal_called))
 	{
 		//Stream SAMPS_PER_BUFF
@@ -89,6 +95,7 @@ int FileHandler::Record2File( const char *FileName, int long long total_num_samp
 
 
 				int m = fwrite((const char*) BaseBuffer,1,SAMPS_PER_BUFF*4*NumBuffers2Write,outfile);
+
 				if(m == 0)
 				{
 					fprintf(StatFile,"EROR DISK\n");
@@ -114,8 +121,9 @@ int FileHandler::Record2File( const char *FileName, int long long total_num_samp
 		}
 
 		num_samples_collected += SAMPS_PER_BUFF;
-		if((num_samples_collected & Time2PrintMask) == 0)
+		if((num_samples_collected - LastPrintSamples) >=  Time2PrintMask)
 		{
+			LastPrintSamples = num_samples_collected;
 			cout <<"Collected "<<num_samples_collected<<" Buffers "<< pBuffers->NumBuffers<<endl;
 			fprintf(StatFile,"RCRD Samples: %lld of: %lld\n",num_samples_collected,total_num_samps);
 			fflush(StatFile);
@@ -141,7 +149,7 @@ int FileHandler::FirstRead(const char *FileName, int LoopMode1)
 
 	long long FileSize = file_stats.st_size;
 		NumSamplesFile = FileSize >> 2;
-		BatchSize = SAMPS_PER_BUFF * 32;
+		BatchSize = BatchSizeTx;
 
 		long long NumBatches = NumSamplesFile / BatchSize;
 		if ((NumBatches * BatchSize) < NumSamplesFile) {
@@ -177,6 +185,7 @@ int FileHandler::FirstRead(const char *FileName, int LoopMode1)
 		while (pBuffers->NumBuffers > 0) {
 			complex<short> *NewBuffer = pBuffers->GetMultipleWriteBuffer(32);
 			int n = fread(NewBuffer, 4, BatchSize, infile);
+
 			CollectedSamples += n;
 			if (n < BatchSize) {
 				EndFile = true;
@@ -291,6 +300,12 @@ int FileHandler::ContinueRead(const char *FileName, int LoopMode1)
 	return 0;
 }
 
+void FileHandler::SetBatchSize()
+{
+	int n = (SAMPS_PER_BUFF/MaxSamplesTx);
+	BatchSizeTx = n * MaxSamplesTx * 32;
 
+
+}
 
 

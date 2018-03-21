@@ -9,6 +9,7 @@
 #define TXSTREAMER_H_
 
 #include "Streamer.h"
+#include <uhd/convert.hpp>
 
 class TxStreamer: public Streamer {
 short *ZeroBuffer;

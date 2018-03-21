@@ -25,7 +25,8 @@ using namespace std;
 
 unsigned long long NSamp, NPack;
 unsigned long long Time2PrintMask;
-long long NumSamplesFile;
+unsigned long long NumSamplesFile;
+unsigned long MaxSamplesRx, MaxSamplesTx;
 Streamer *pobjSt;
 namespace po = boost::program_options;
 //int NumErrors = 0;
@@ -35,6 +36,18 @@ void sig_int_handler(int) {
 }
 
 FILE *StatFile;
+
+
+void InitMaxSamples(uhd::usrp::multi_usrp::sptr usrp)
+{
+	uhd::stream_args_t stream_args("sc16", "sc16");
+	uhd::tx_streamer::sptr tx_stream = usrp->get_tx_stream(stream_args);
+	MaxSamplesTx = tx_stream->get_max_num_samps();
+	uhd::rx_streamer::sptr rx_stream = usrp->get_rx_stream(stream_args);
+	MaxSamplesRx = rx_stream->get_max_num_samps();
+	cout <<"Max Samples "<<MaxSamplesRx<<endl;
+
+}
 
 void my_handler(uhd::msg::type_t type, const std::string &msg) {
 //handle the message...
@@ -454,8 +467,8 @@ void RunFileRead(void *PtrIn) {
 
 	pobj->ContinueRead(FileName, Loop);
 
-	cout << "Finished File" << endl;
-	stop_signal_called = true;
+	cout << "Finished  File" << endl;
+//	stop_signal_called = true;
 
 }
 
@@ -483,7 +496,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 			"sample type: double, float, or short")("nsamps",
 			po::value<size_t>(&total_num_samps)->default_value(1000000),
 			"total number of samples to receive")("duration",
-			po::value<double>(&total_time)->default_value(0),
+			po::value<double>(&total_time)->default_value(1),
 			"total number of seconds to receive")("spb",
 			po::value<size_t>(&spb)->default_value(16384), "samples per buffer")(
 			"rate", po::value<double>(&rate)->default_value(1e6),
@@ -520,6 +533,20 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 				<< std::endl;
 		return ~0;
 	}
+
+	/*
+
+	if(vm.count("loop"))
+	{
+		cout<<"stupid"<<endl;
+	}
+
+	if(vm.count("duration"))
+	{
+		total_num_samps = ceil(rate*total_time);
+	}
+
+	*/
 //
 //    bool bw_summary = vm.count("progress") > 0;
 //    bool stats = vm.count("stats") > 0;
@@ -563,7 +590,19 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 				(policy == SCHED_RR) ? "SCHED_RR" :
 				(policy == SCHED_OTHER) ? "SCHED_OTHER" : "???")
 			<< ", priority=" << param.sched_priority << std::endl;
+/*
+	cpu_set_t cpuset1;
+	// CPU_ZERO: This macro initializes the CPU set set to be the empty set.
+	CPU_ZERO(&cpuset1);
+	// CPU_SET: This macro adds cpu to the CPU set set.
+	CPU_SET(9, &cpuset1);
+	int status1 = sched_setaffinity(0, sizeof(cpuset1), &cpuset1);
+	if (status1 != 0)
+	{
+	    perror("sched_setaffinity");
+	 }
 
+*/
 	int OperationMode = -1;
 
 	if (vm.count("mode")) {
@@ -582,12 +621,56 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 	if (OperationMode == -1)
 		exit(-1);
 
+
+
+
 	//create a usrp device
 	std::cout << std::endl;
-	//args += boost::str(boost::format(",master_clock_rate=%f") % 184.32e6);
+
+	bool Basedon184 = false;
+
+	if( abs(rate - 184.32e6) < 1)
+	{
+		Basedon184 = true;
+	}
+	else
+	{
+		if( abs(rate - 92.16e6) < 1)
+			{
+				Basedon184 = true;
+			}
+			else
+			{
+				if( abs(rate - 46.08e6) < 1)
+							{
+								Basedon184 = true;
+							}
+							else
+							{
+								if( abs(rate - 23.04e6) < 1)
+											{
+												Basedon184 = true;
+											}
+
+
+
+							}
+			}
+	}
+
+
+	if(Basedon184)
+	{
+		args += boost::str(boost::format(",master_clock_rate=%f") % 184.32e6);
+	}
 	std::cout << boost::format("Creating the usrp device with: %s...") % args
 			<< std::endl;
 	uhd::usrp::multi_usrp::sptr usrp = uhd::usrp::multi_usrp::make(args);
+
+	InitMaxSamples(usrp);
+
+	cout<<"MaxSamples "<<MaxSamplesRx<<" "<<MaxSamplesTx<<endl;
+	objFile.SetBatchSize();
 
 	//Lock mboard clocks
 	usrp->set_clock_source(ref);
@@ -780,6 +863,9 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 			LoopModeint = 1;
 		}
 
+
+
+
 		objFile.SetStreamer(&objBuffers, &objReqQue);
 
 		objFile.FirstRead(file.c_str(), LoopModeint);
@@ -817,6 +903,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 			exit(EXIT_FAILURE);
 		}
 
+#ifdef SERVER_VERSION
 		cpu_set_t cpuset;
 		// CPU_ZERO: This macro initializes the CPU set set to be the empty set.
 		CPU_ZERO(&cpuset);
@@ -834,6 +921,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 
 			cout << "pthread_getaffinity_np error" << endl;
 		}
+#endif
 
 		FileRecordParams Params;
 		Params.obj = (void *) &objFile;
@@ -871,6 +959,8 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 			exit(EXIT_FAILURE);
 		}
 
+#ifdef SERVER_VERSION
+
 		cout << "Setting Affinity File" << endl;
 
 		// CPU_ZERO: This macro initializes the CPU set set to be the empty set.
@@ -888,6 +978,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 
 			cout << "pthread_getaffinity_np error" << endl;
 		}
+#endif
 
 		while (not stop_signal_called) {
 			boost::this_thread::sleep(boost::posix_time::milliseconds(1000));
@@ -942,7 +1033,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 			perror("pthread_setschedparam");
 			exit(EXIT_FAILURE);
 		}
-
+#ifdef SERVER_VERSION
 		cpu_set_t cpuset;
 		// CPU_ZERO: This macro initializes the CPU set set to be the empty set.
 		CPU_ZERO(&cpuset);
@@ -960,7 +1051,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 
 			cout << "pthread_getaffinity_np error" << endl;
 		}
-
+#endif
 //		displayAndChange(workerThread);
 
 		if (PerformAGC) {
@@ -1002,8 +1093,8 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 						(policy == SCHED_OTHER) ? "SCHED_OTHER" : "???")
 					<< ", priority=" << param.sched_priority << std::endl;
 
-			policy = SCHED_FIFO;
-			param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+			policy = SCHED_RR;
+			param.sched_priority =  50/*sched_get_priority_max(SCHED_FIFO)*/;
 
 			if ((retcode = pthread_setschedparam(threadID2, policy, &param))
 					!= 0) {
@@ -1011,7 +1102,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 				perror("pthread_setschedparam");
 				exit(EXIT_FAILURE);
 			}
-
+#ifdef SERVER_VERSION
 			cout << "Setting Affinity File" << endl;
 
 			cpu_set_t cpuset;
@@ -1031,6 +1122,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 
 				cout << "pthread_getaffinity_np error" << endl;
 			}
+#endif
 			while (not stop_signal_called) {
 				boost::this_thread::sleep(
 						boost::posix_time::milliseconds(1000));

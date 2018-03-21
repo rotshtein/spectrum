@@ -16,6 +16,9 @@ Streamer::Streamer(struct StreamerParams *Params) {
 	Buff1 = (Buffers *) Params->Buffer;
 	usrp = Params->usrp;
 	ReqQue = (StreamingRequests *) Params->RequestsQue;
+	MaxTime = 0;
+	num_requested_samples = 0;
+	Rate = 0;
 }
 
 Streamer::~Streamer() {
@@ -26,10 +29,7 @@ void Streamer::Run(void) {
 	//create a receive streamer
 	uhd::stream_args_t stream_args("sc16", "sc16");
 	uhd::rx_streamer::sptr rx_stream = usrp->get_rx_stream(stream_args);
-	const size_t samps_per_buff1 = rx_stream->get_max_num_samps();
 
-	cout<<"Max Samps " <<samps_per_buff1<<endl;
-	cout<<"Max Samps " <<samps_per_buff1<<endl;
 
 	uhd::rx_metadata_t md;
 	bool overflow_message = true;
@@ -104,9 +104,10 @@ void Streamer::Run(void) {
 			size_t num_rx_samps;
 			size_t n = 0;
 
-			for(int ii = 0 ; ii < NumBuffers2Write; ii++)
+			for(int ii = 0 ; ii < (NumBuffers2Write*NUM_BATCHES); ii++)
 			{
-				num_rx_samps = rx_stream->recv(NewBuffer + n, SAMPS_PER_BUFF,md, 3.0, false);
+
+				num_rx_samps = rx_stream->recv(NewBuffer + n, ONE_BATCH ,md, 3.0, false);
 				n += num_rx_samps;
 
 				if (md.error_code == uhd::rx_metadata_t::ERROR_CODE_TIMEOUT) {
@@ -159,6 +160,8 @@ void Streamer::Run(void) {
 			Buff1->AdvanceWriteBuffer(NumBuffers2Write);
 
 			num_total_samps += n;
+	//		cout<<" Num Samples "<< num_total_samps<<" "<<num_requested_samples<<endl;
+
 
 //				 if(newtime > MaxTime)
 //				 {
