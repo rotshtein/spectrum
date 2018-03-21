@@ -44,7 +44,7 @@ void TxStreamer::Run() {
 	struct timespec tp0/*, tp1*/;
 	long long Round = 0;
 	long long PlayedRound = 0;
-	long long PlayedTotal = 0;
+	unsigned long long PlayedTotal = 0;
 	LastPrintSample = 0;
 	clock_gettime(CLOCK_MONOTONIC, &tp0);
 

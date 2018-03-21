@@ -159,8 +159,10 @@ int FileHandler::FirstRead(const char *FileName, int LoopMode1)
 		infile = fopen(FileName, "rb");
 		char Header1[8];
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
 		fread(Header1,1,8,infile);
-
+#pragma GCC diagnostic pop
 		HasHeader = true;
 
 

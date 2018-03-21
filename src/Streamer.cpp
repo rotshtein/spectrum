@@ -37,7 +37,7 @@ void Streamer::Run(void) {
 	//setup streaming
 	uhd::stream_cmd_t stream_cmd(
 			uhd::stream_cmd_t::STREAM_MODE_NUM_SAMPS_AND_DONE);
-	bool continue_on_bad_packet = false;
+	//bool continue_on_bad_packet = false;
 
 //	unsigned int LLog = 1 << 20;
 //	unsigned int MaskLog = LLog - 1;
