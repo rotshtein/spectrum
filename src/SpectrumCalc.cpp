@@ -196,7 +196,7 @@ int SpectrumCalc::Record2File( const char *FileName, int long long total_num_sam
 				int m = fwrite((const char*) BaseBuffer,1,SAMPS_PER_BUFF*4*NumBuffers2Write,outfile);
 				if(m == 0)
 				{
-					fprintf(StatFile, "EROR DISK\n");
+					fprintf(StatFile,"%s", "EROR DISK\n");
 					fflush(StatFile);
 					stop_signal_called = true;
 				}
