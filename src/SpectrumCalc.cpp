@@ -7,7 +7,6 @@
 
 #include "SpectrumCalc.h"
 extern bool stop_signal_called;
-extern FILE *StatFile;
 SpectrumCalc::SpectrumCalc() {
 	// TODO Auto-generated constructor stub
 	hamm = (fftwf_complex*) fftw_malloc(sizeof(fftwf_complex) * N);
@@ -196,8 +195,7 @@ int SpectrumCalc::Record2File( const char *FileName, int long long total_num_sam
 				int m = fwrite((const char*) BaseBuffer,1,SAMPS_PER_BUFF*4*NumBuffers2Write,outfile);
 				if(m == 0)
 				{
-					fprintf(StatFile,"%s", "EROR DISK\n");
-					fflush(StatFile);
+					printf("%s", "EROR DISK\n");
 					stop_signal_called = true;
 				}
 
@@ -222,10 +220,6 @@ int SpectrumCalc::Record2File( const char *FileName, int long long total_num_sam
 		if((num_samples_collected & 0x7FFFFFFF) == 0)
 		{
 			cout <<"Collected "<<num_samples_collected<<" Buffers "<< pBuffers->NumBuffers<<endl;
-			fprintf(StatFile,"RCRD Samples: %lld of: %lld\n",num_samples_collected,total_num_samps);
-			fflush(StatFile);
-
-
 		}
 	}
 

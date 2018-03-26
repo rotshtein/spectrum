@@ -9,7 +9,6 @@
 #include "Streamer.h"
 
 extern bool stop_signal_called;
-extern FILE *StatFile;
 
 Streamer::Streamer(struct StreamerParams *Params) {
 	// TODO Auto-generated constructor stub
@@ -132,8 +131,8 @@ void Streamer::Run(void) {
 
 	//					boost::this_thread::sleep(boost::posix_time::microseconds(1000));
 
-							fprintf(StatFile, "EROR Drop\n");
-							fflush(StatFile);
+							printf("EROR Drop\n");
+
 						}
 					}
 			}

@@ -11,7 +11,6 @@ extern bool stop_signal_called;
 //extern unsigned long long NPack;
 extern long long NumSamplesFile;
 extern unsigned long long Time2PrintMask;
-extern FILE *StatFile;
 
 TxStreamer::TxStreamer(struct StreamerParams *Params) :
 		Streamer(Params) {
@@ -173,8 +172,7 @@ void TxStreamer::Run() {
 			PlayedRound = NumTransmittedSamples - PlayedTotal;
 			LastPrintSample = NumTransmittedSamples;
 			cout << "Played Round: " <<Round<<" Samples: "<< PlayedRound<<" of: "<< NumSamplesFile<< endl;
-			fprintf(StatFile,"PLAY Round: %lld Samples: %lld of: %lld\n",Round,PlayedRound,NumSamplesFile);
-			fflush(StatFile);
+
 		}
 
 

@@ -9,9 +9,7 @@
 extern bool stop_signal_called;
 extern long long NumSamplesFile;
 static char Header[8] ={'R','E','C','O','r','d','e','r'};
-extern FILE *StatFile;
 extern unsigned long long Time2PrintMask;
-extern unsigned long MaxSamplesTx;
 FileHandler::FileHandler() {
 	Gain = 0;
 	Freq = 0;
@@ -98,8 +96,7 @@ int FileHandler::Record2File( const char *FileName, int long long total_num_samp
 
 				if(m == 0)
 				{
-					fprintf(StatFile,"EROR DISK\n");
-					fflush(StatFile);
+					printf("EROR DISK\n");
 					stop_signal_called = true;
 				}
 
@@ -125,8 +122,7 @@ int FileHandler::Record2File( const char *FileName, int long long total_num_samp
 		{
 			LastPrintSamples = num_samples_collected;
 			cout <<"Collected "<<num_samples_collected<<" Buffers "<< pBuffers->NumBuffers<<endl;
-			fprintf(StatFile,"RCRD Samples: %lld of: %lld\n",num_samples_collected,total_num_samps);
-			fflush(StatFile);
+
 		}
 	}
 
@@ -304,8 +300,8 @@ int FileHandler::ContinueRead(const char *FileName, int LoopMode1)
 
 void FileHandler::SetBatchSize()
 {
-	int n = (SAMPS_PER_BUFF/MaxSamplesTx);
-	BatchSizeTx = n * MaxSamplesTx * 32;
+	int n = (SAMPS_PER_BUFF/ONE_BATCH);
+	BatchSizeTx = n * ONE_BATCH * 32;
 
 
 }
